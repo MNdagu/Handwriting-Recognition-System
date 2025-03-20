@@ -16,6 +16,32 @@ class HandwrittenTextViewSet(viewsets.ModelViewSet):
     queryset = HandwrittenText.objects.all()
     serializer_class = HandwrittenTextSerializer
 
+    def preprocess_image(self, image):
+        # Convert to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        
+        # Apply Gaussian blur to reduce noise
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        
+        # Apply adaptive thresholding
+        thresh = cv2.adaptiveThreshold(
+            blurred,
+            255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            11,  # Block size
+            2    # C constant
+        )
+        
+        # Denoise the image
+        denoised = cv2.fastNlMeansDenoising(thresh)
+        
+        # Optional: Increase contrast
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+        enhanced = clahe.apply(denoised)
+        
+        return enhanced
+
     @action(detail=True, methods=['post'])
     def process_image(self, request, pk=None):
         instance = self.get_object()
@@ -27,16 +53,22 @@ class HandwrittenTextViewSet(viewsets.ModelViewSet):
             # Read the image
             image_path = instance.image.path
             img = cv2.imread(image_path)
+            
+            if img is None:
+                raise Exception("Failed to read image")
 
             # Preprocess the image
-            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-            thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
-
+            processed_img = self.preprocess_image(img)
+            
             # Convert to PIL Image for pytesseract
-            pil_image = Image.fromarray(thresh)
+            pil_image = Image.fromarray(processed_img)
 
-            # Perform OCR
-            extracted_text = pytesseract.image_to_string(pil_image)
+            # Perform OCR with custom configuration
+            custom_config = r'--oem 3 --psm 6'
+            extracted_text = pytesseract.image_to_string(
+                pil_image,
+                config=custom_config
+            )
 
             # Update the instance with extracted text
             instance.extracted_text = extracted_text
