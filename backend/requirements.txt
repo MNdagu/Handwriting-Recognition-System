@@ -6,4 +6,6 @@ Pillow==10.2.0
 python-dotenv==1.0.1
 pytesseract==0.3.10
 numpy==1.26.4
-opencv-python==4.9.0.80 
+opencv-python==4.9.0.80
+gunicorn==21.2.0
+dj-database-url==2.1.0
